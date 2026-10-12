@@ -89,7 +89,8 @@ Create an API key at [console.anthropic.com](https://console.anthropic.com) and 
 npm run dev        # local development
 npm run build      # production build
 npm run check      # typecheck + lint + unit tests
-npm test           # unit tests (calendar maths, progress, prompt, redirect safety)
+npm test           # unit and route tests (calendar maths, progress, prompt, redirect safety,
+                   # sparring, sign-in callbacks, reminder cron — Supabase, Claude and Resend mocked)
 ```
 
 **Database security test.** Run this against a throwaway local Postgres, never production:
