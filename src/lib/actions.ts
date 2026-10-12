@@ -4,12 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { LIMITS } from "./config";
-import { getSession, parseObjective, parseReview } from "./data";
+import { ASPIRATION_COLUMNS, OBJECTIVE_COLUMNS, getSession, parseAspiration, parseObjective, parseReview } from "./data";
 import { newId } from "./okr";
 import {
+  aspirationInputSchema,
+  foundationSchema,
   objectiveInputSchema,
   profileInputSchema,
   reviewInputSchema,
+  type AspirationInput,
   type Objective,
   type ObjectiveInput,
   type ProfileInput,
@@ -98,7 +101,7 @@ async function applyCompletion(week: string, input: ReviewInput) {
   const quarter = quarterOfWeek(week).key;
   const { data: rows } = await supabase
     .from("objectives")
-    .select("id, quarter, position, title, why, key_results, created_at, updated_at")
+    .select(OBJECTIVE_COLUMNS)
     .eq("quarter", quarter);
   for (const o of (rows ?? []).map(parseObjective)) {
     let changed = false;
@@ -155,7 +158,7 @@ export async function createObjective(quarter: string, seed?: Partial<ObjectiveI
     const { data, error } = await supabase
       .from("objectives")
       .insert({ user_id: user.id, quarter, position: count ?? 0, ...input })
-      .select("id, quarter, position, title, why, key_results, created_at, updated_at")
+      .select(OBJECTIVE_COLUMNS)
       .single();
     if (error) {
       if (error.message.includes("objective_limit")) return fail("Three objectives is the limit. Delete one to add another.");
@@ -193,6 +196,86 @@ export async function deleteObjective(id: string): Promise<ActionResult> {
     if (error) throw error;
     revalidatePath("/app", "layout");
     return ok(undefined);
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+const FOUNDATION_TAKEN = "That foundation already has an objective this quarter. One per foundation.";
+
+/**
+ * Tags an objective with the foundation it serves, or clears the tag with `null`.
+ * One objective per foundation per quarter; the database enforces it too.
+ */
+export async function setObjectiveFoundation(id: string, foundation: string | null): Promise<ActionResult> {
+  try {
+    const parsed = foundationSchema.shape.id.nullable().parse(foundation);
+    const { supabase } = await authed();
+    const { data: row, error: e1 } = await supabase.from("objectives").select("id, quarter").eq("id", id).maybeSingle();
+    if (e1) throw e1;
+    if (!row) return fail("That objective no longer exists.");
+
+    if (parsed) {
+      const { data: asp, error: e2 } = await supabase.from("aspirations").select(ASPIRATION_COLUMNS).maybeSingle();
+      if (e2) throw e2;
+      if (!parseAspiration(asp).foundations.some((f) => f.id === parsed)) {
+        return fail("That foundation no longer exists. Reload the page.");
+      }
+      const { data: taken, error: e3 } = await supabase
+        .from("objectives")
+        .select("id")
+        .eq("quarter", row.quarter as string)
+        .eq("foundation", parsed)
+        .neq("id", id)
+        .limit(1);
+      if (e3) throw e3;
+      if (taken && taken.length) return fail(FOUNDATION_TAKEN);
+    }
+
+    const { error } = await supabase.from("objectives").update({ foundation: parsed }).eq("id", id);
+    if (error) {
+      if (error.code === "23505") return fail(FOUNDATION_TAKEN);
+      throw error;
+    }
+    revalidatePath("/app", "layout");
+    return ok(undefined);
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+// ---------------------------------------------------------------- aspiration
+
+/**
+ * Saves the long-term aspiration. Blank questions are dropped.
+ * If a foundation was removed, objectives tagged with it are untagged so no tag points at nothing.
+ */
+export async function saveAspiration(raw: AspirationInput): Promise<ActionResult<{ savedAt: string }>> {
+  try {
+    const input = aspirationInputSchema.parse(raw);
+    const ids = input.foundations.map((f) => f.id);
+    if (new Set(ids).size !== ids.length) return fail("Two foundations share an id. Reload the page.");
+    const clean = {
+      horizon_year: input.horizon_year,
+      vision: input.vision,
+      foundations: input.foundations.map((f) => ({ id: f.id, name: f.name.trim() })),
+      questions: input.questions.map((q) => q.trim()).filter(Boolean),
+    };
+    const { supabase, user } = await authed();
+    const { data, error } = await supabase
+      .from("aspirations")
+      .upsert({ user_id: user.id, ...clean }, { onConflict: "user_id" })
+      .select("updated_at")
+      .single();
+    if (error) throw error;
+
+    let untag = supabase.from("objectives").update({ foundation: null }).not("foundation", "is", null);
+    if (ids.length) untag = untag.not("foundation", "in", `(${ids.map((i) => `"${i}"`).join(",")})`);
+    const { error: e2 } = await untag;
+    if (e2) throw e2;
+
+    revalidatePath("/app", "layout");
+    return ok({ savedAt: data.updated_at as string });
   } catch (e) {
     return fail(message(e));
   }

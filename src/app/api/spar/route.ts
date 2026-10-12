@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession, parseObjective, parseReview } from "@/lib/data";
+import { ASPIRATION_COLUMNS, OBJECTIVE_COLUMNS, getSession, parseAspiration, parseObjective, parseReview } from "@/lib/data";
 import { SPARRING_SYSTEM, buildSparringPrompt } from "@/lib/prompt";
 import { isWeekId, quarterLabel, quarterOfWeek, quarterPace, todayIn, addDays, weekMonday } from "@/lib/week";
 
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const quarter = quarterOfWeek(week);
-  const [{ data: reviewRow }, { data: objectiveRows }, { data: historyRows }, { data: profile }] = await Promise.all([
+  const [{ data: reviewRow }, { data: objectiveRows }, { data: historyRows }, { data: profile }, { data: aspirationRow }] = await Promise.all([
     supabase
       .from("reviews")
       .select("week, carried, reflection, confidence, kr_values, next, sparring, completed_at, updated_at")
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       .maybeSingle(),
     supabase
       .from("objectives")
-      .select("id, quarter, position, title, why, key_results, created_at, updated_at")
+      .select(OBJECTIVE_COLUMNS)
       .eq("quarter", quarter.key)
       .order("position"),
     supabase
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       .order("week", { ascending: false })
       .limit(6),
     supabase.from("profiles").select("timezone").eq("id", user.id).maybeSingle(),
+    supabase.from("aspirations").select(ASPIRATION_COLUMNS).maybeSingle(),
   ]);
 
   if (!reviewRow) return NextResponse.json({ error: "Save the review first." }, { status: 409 });
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
     objectives: (objectiveRows ?? []).map(parseObjective),
     review,
     history: (historyRows ?? []).map(parseReview),
+    aspiration: parseAspiration(aspirationRow),
   });
 
   await supabase.from("spar_events").insert({ user_id: user.id, week });

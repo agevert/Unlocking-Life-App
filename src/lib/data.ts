@@ -4,8 +4,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
 import {
   commitmentSchema,
+  emptyAspiration,
+  foundationSchema,
   keyResultSchema,
   reflectionSchema,
+  type Aspiration,
   type Objective,
   type Profile,
   type Review,
@@ -66,9 +69,12 @@ type ObjectiveRow = {
   title: string;
   why: string;
   key_results: unknown;
+  foundation?: unknown;
   created_at: string;
   updated_at: string;
 };
+
+export const OBJECTIVE_COLUMNS = "id, quarter, position, title, why, key_results, foundation, created_at, updated_at";
 
 export function parseObjective(row: ObjectiveRow): Objective {
   const krs = Array.isArray(row.key_results) ? row.key_results : [];
@@ -78,6 +84,7 @@ export function parseObjective(row: ObjectiveRow): Objective {
     position: row.position,
     title: row.title ?? "",
     why: row.why ?? "",
+    foundation: typeof row.foundation === "string" && row.foundation ? row.foundation : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     key_results: krs.flatMap((k) => {
@@ -91,7 +98,7 @@ export async function getObjectives(quarter: QuarterKey): Promise<Objective[]> {
   const { supabase } = await requireUser();
   const { data, error } = await supabase
     .from("objectives")
-    .select("id, quarter, position, title, why, key_results, created_at, updated_at")
+    .select(OBJECTIVE_COLUMNS)
     .eq("quarter", quarter)
     .order("position")
     .order("created_at");
@@ -159,3 +166,43 @@ export async function getReview(week: WeekId): Promise<Review | null> {
   if (error) throw error;
   return data ? parseReview(data) : null;
 }
+
+// ---------------------------------------------------------------- aspiration
+
+type AspirationRow = {
+  horizon_year?: unknown;
+  vision?: unknown;
+  foundations?: unknown;
+  questions?: unknown;
+  updated_at?: unknown;
+};
+
+export const ASPIRATION_COLUMNS = "horizon_year, vision, foundations, questions, updated_at";
+
+/** Tolerant parse: anything malformed is dropped rather than breaking the page. */
+export function parseAspiration(row: unknown): Aspiration {
+  if (!row || typeof row !== "object" || Array.isArray(row)) return emptyAspiration();
+  const r = row as AspirationRow;
+  const year = typeof r.horizon_year === "number" && Number.isInteger(r.horizon_year) ? r.horizon_year : null;
+  return {
+    horizon_year: year,
+    vision: typeof r.vision === "string" ? r.vision : "",
+    foundations: (Array.isArray(r.foundations) ? r.foundations : []).flatMap((f) => {
+      const p = foundationSchema.safeParse(f);
+      return p.success ? [p.data] : [];
+    }),
+    questions: (Array.isArray(r.questions) ? r.questions : []).filter((q): q is string => typeof q === "string"),
+    updated_at: typeof r.updated_at === "string" ? r.updated_at : null,
+  };
+}
+
+export const getAspiration = cache(async (): Promise<Aspiration> => {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase.from("aspirations").select(ASPIRATION_COLUMNS).maybeSingle();
+  if (error) {
+    // Don't take the whole app down if the aspiration can't be read; the quarter still works without it.
+    console.error("aspiration load failed", error);
+    return emptyAspiration();
+  }
+  return parseAspiration(data);
+});

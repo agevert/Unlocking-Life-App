@@ -10,10 +10,11 @@ Three objectives a quarter, a 30-minute weekly review, and a sparring partner (C
 
 | Area | What it does |
 |---|---|
-| **Now** | This week's commitments to tick off, objectives with progress bars against a pace marker, latest confidence |
+| **Now** | This week's commitments to tick off, the aspiration in one line, objectives with progress bars against a pace marker, latest confidence |
+| **Aspiration** | The layer above the quarter: a horizon year and vision, up to three foundations, open strategic questions, and which foundation each of this quarter's objectives serves |
 | **Weekly review** | Four steps: last week's commitments, numbers and confidence, reflection, next week's three. Autosaves; ⌘/Ctrl + Enter completes |
-| **Sparring** | Streams a challenge from Claude based on the review, the objectives and recent history. Rate-limited per user |
-| **Objectives** | Autosaving editor. Plan next quarter or look back at the last one |
+| **Sparring** | Streams a challenge from Claude based on the review, the objectives, recent history and the aspiration ("Long game"). Rate-limited per user |
+| **Objectives** | Autosaving editor, each objective tagged to one foundation. Plan next quarter or look back at the last one |
 | **Log** | Follow-through rate, share of commitments linked to a key result, energy, confidence chart, all past reviews |
 | **Quarter strip** | One cell per ISO week: reviewed, draft, missed. Tap to open that week |
 | **Onboarding** | Three screens: the principles, name and review day (time zone auto-detected), first objective |
@@ -21,7 +22,7 @@ Three objectives a quarter, a 30-minute weekly review, and a sparring partner (C
 | **Account** | Passwordless sign-in (link or 6-digit code, optional Google), settings, data export (GDPR Art. 20), account deletion |
 | **Marketing & legal** | Landing page, Impressum, privacy policy and terms templates |
 
-The product rules are enforced in the database, not just the UI: max 3 objectives per quarter, 4 key results per objective, 3 commitments per week.
+The product rules are enforced in the database, not just the UI: max 3 objectives per quarter, 4 key results per objective, 3 commitments per week, 3 foundations, one objective per foundation per quarter.
 
 ---
 
@@ -38,7 +39,7 @@ npm run dev                     # http://localhost:3000
 ### Supabase setup
 
 1. **Create a project.** Choose region **Frankfurt (eu-central-1)** for GDPR.
-2. **Create the tables.** Open *SQL Editor*, paste `supabase/migrations/0001_init.sql`, and run it. If you use the Supabase CLI instead, run `supabase db push`.
+2. **Create the tables.** Open *SQL Editor*, paste `supabase/migrations/0001_init.sql` and run it, then do the same with `0002_aspiration.sql`. If you use the Supabase CLI instead, run `supabase db push`.
 3. **Copy the keys.** *Project Settings → API keys*: the URL, the **publishable** key and the **secret** key go into `.env.local`.
 4. **Configure auth URLs.** *Authentication → URL Configuration*:
    - Site URL: `http://localhost:3000` (later, your production domain)
@@ -98,6 +99,7 @@ npm test           # unit and route tests (calendar maths, progress, prompt, red
 ```bash
 psql -d test -f supabase/tests/local_supabase_stub.sql
 psql -d test -f supabase/migrations/0001_init.sql
+psql -d test -f supabase/migrations/0002_aspiration.sql
 psql -d test -f supabase/tests/rls_test.sql
 ```
 
@@ -119,6 +121,7 @@ src/
     app/welcome/              onboarding
     app/(main)/               signed-in shell: header, quarter strip, tabs / bottom bar
       page.tsx                Now
+      aspiration/             vision, foundations, open questions
       review/[week]/          weekly review (ISO week in the URL, e.g. /app/review/2026-W42)
       objectives/  log/  guide/  settings/
     api/spar/                 streams Claude's challenge, rate-limited, saved to the review

@@ -6,6 +6,9 @@ export const LIMITS = {
   objectives: 3,
   keyResults: 4,
   commitments: 3,
+  /** One foundation per objective slot, so a full quarter touches every foundation once. */
+  foundations: 3,
+  questions: 5,
 } as const;
 
 export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;

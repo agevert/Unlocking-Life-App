@@ -15,10 +15,11 @@ export function fakeSupabase(resolve: Resolver, auth: Record<string, unknown> = 
       call.ops.push({ op, args });
       return builder;
     };
-    for (const op of ["select", "insert", "update", "delete", "eq", "not", "gte", "lt", "order", "limit", "range"]) {
+    for (const op of ["select", "insert", "upsert", "update", "delete", "eq", "neq", "not", "gte", "gt", "lt", "order", "limit", "range"]) {
       builder[op] = chain(op);
     }
     builder.maybeSingle = chain("maybeSingle");
+    builder.single = chain("single");
     builder.then = (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) =>
       Promise.resolve({ data: null, error: null, count: null, ...resolve(call) }).then(ok, fail);
     return builder;

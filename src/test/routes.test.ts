@@ -107,6 +107,43 @@ describe("POST /api/spar", () => {
   });
 });
 
+describe("POST /api/spar with an aspiration", () => {
+  it("sends the vision, foundations and open questions to Claude", async () => {
+    signedIn((c) => {
+      if (c.table === "spar_events") return { count: 0 };
+      if (c.table === "reviews" && has(c, "maybeSingle")) return { data: reviewRow(true) };
+      if (c.table === "profiles") return { data: { timezone: "Europe/Berlin" } };
+      if (c.table === "aspirations") {
+        return {
+          data: {
+            horizon_year: 2036, vision: "Chile, family, an exit behind me.", updated_at: "2026-10-12T20:00:00Z",
+            foundations: [{ id: "f1", name: "Body and mind" }, { id: "bad id!", name: "Dropped" }],
+            questions: ["Search or build?"],
+          },
+        };
+      }
+      if (c.table === "objectives") {
+        return {
+          data: [{
+            id: "o1", quarter: "2026-Q4", position: 0, title: "Sub-3:30 marathon", why: "", foundation: "f1",
+            key_results: [], created_at: "", updated_at: "",
+          }],
+        };
+      }
+      return { data: [] };
+    });
+    const res = await (await import("@/app/api/spar/route")).POST(sparRequest({ week: "2026-W41" }));
+    expect(res.status).toBe(200);
+    await res.text();
+    const content = (state.streamArgs[0] as { messages: { content: string }[] }).messages[0].content;
+    expect(content).toContain("Vision: Chile, family, an exit behind me.");
+    expect(content).toContain("1. Body and mind: Sub-3:30 marathon");
+    expect(content).not.toContain("Dropped");
+    expect(content).toContain("- Search or build?");
+    expect(content).toContain("Long game:");
+  });
+});
+
 describe("sign-in return routes", () => {
   it("exchanges the magic-link code and goes to the requested page", async () => {
     const exchange = vi.fn(async () => ({ error: null }));

@@ -25,9 +25,46 @@ export type Objective = ObjectiveInput & {
   id: string;
   quarter: string;
   position: number;
+  /** Id of the aspiration foundation this objective serves, if tagged. */
+  foundation: string | null;
   created_at: string;
   updated_at: string;
 };
+
+// ---------------------------------------------------------------- aspiration
+
+export const foundationSchema = z.object({
+  id: z.string().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/, "Invalid id"),
+  name: z.string().max(80).default(""),
+});
+export type Foundation = z.infer<typeof foundationSchema>;
+
+export const aspirationInputSchema = z.object({
+  horizon_year: z.number().int().min(2000).max(2200).nullable(),
+  vision: z.string().max(1200),
+  foundations: z.array(foundationSchema).max(LIMITS.foundations),
+  questions: z.array(z.string().max(240)).max(LIMITS.questions),
+});
+export type AspirationInput = z.infer<typeof aspirationInputSchema>;
+
+export type Aspiration = AspirationInput & { updated_at: string | null };
+
+export function emptyAspiration(): Aspiration {
+  return { horizon_year: null, vision: "", foundations: [], questions: [], updated_at: null };
+}
+
+/** True once there is anything worth showing or sending to the sparring partner. */
+export function hasAspiration(a: Aspiration | null | undefined): a is Aspiration {
+  return !!a && (!!a.vision.trim() || a.foundations.some((f) => f.name.trim()) || a.questions.some((q) => q.trim()));
+}
+
+/** Display name of a foundation, falling back to its position when unnamed. */
+export function foundationLabel(a: Aspiration, id: string | null): string | null {
+  if (!id) return null;
+  const i = a.foundations.findIndex((f) => f.id === id);
+  if (i < 0) return null;
+  return a.foundations[i].name.trim() || `Foundation ${i + 1}`;
+}
 
 export const commitmentSchema = z.object({
   text: z.string().max(240),
