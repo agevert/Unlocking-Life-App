@@ -1,0 +1,258 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { LIMITS } from "./config";
+import { getSession, parseObjective, parseReview } from "./data";
+import { newId } from "./okr";
+import {
+  objectiveInputSchema,
+  profileInputSchema,
+  reviewInputSchema,
+  type Objective,
+  type ObjectiveInput,
+  type ProfileInput,
+  type ReviewInput,
+} from "./schemas";
+import { createAdminClient } from "./supabase/admin";
+import { isQuarterKey, isWeekId, quarterOfWeek, shiftWeek } from "./week";
+
+export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
+
+const ok = <T,>(data: T): ActionResult<T> => ({ ok: true, data });
+const fail = (error: string): ActionResult<never> => ({ ok: false, error });
+
+async function authed() {
+  const { supabase, user } = await getSession();
+  if (!user) throw new Error("Your session has ended. Sign in again.");
+  return { supabase, user };
+}
+
+function message(e: unknown): string {
+  if (e instanceof z.ZodError) return "Some fields are invalid. Check the values and try again.";
+  if (e instanceof Error) return e.message;
+  return "Something went wrong. Try again.";
+}
+
+// ---------------------------------------------------------------- reviews
+
+/**
+ * Saves a review. Drafts autosave with `complete: false`.
+ * Completing also ticks off last week's commitments and copies the key-result values onto the objectives.
+ */
+export async function saveReview(
+  week: string,
+  raw: ReviewInput,
+  complete: boolean,
+): Promise<ActionResult<{ savedAt: string; completedAt: string | null }>> {
+  try {
+    if (!isWeekId(week)) return fail("That week doesn't exist.");
+    const input = reviewInputSchema.parse(raw);
+    input.next = input.next.filter((n) => n.text.trim()).map((n) => ({ ...n, text: n.text.trim() }));
+    const { supabase, user } = await authed();
+
+    const row: Record<string, unknown> = { user_id: user.id, week, ...input };
+    if (complete) row.completed_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from("reviews")
+      .upsert(row, { onConflict: "user_id,week" })
+      .select("updated_at, completed_at")
+      .single();
+    if (error) throw error;
+
+    if (complete) {
+      await applyCompletion(week, input);
+      revalidatePath("/app", "layout");
+    }
+    return ok({ savedAt: data.updated_at as string, completedAt: (data.completed_at as string) ?? null });
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+async function applyCompletion(week: string, input: ReviewInput) {
+  const { supabase } = await authed();
+
+  // 1. Mirror the "done" ticks onto last week's commitments.
+  const prevWeek = shiftWeek(week, -1);
+  const { data: prev } = await supabase.from("reviews").select("week, next").eq("week", prevWeek).maybeSingle();
+  if (prev && Array.isArray(prev.next) && input.carried.length) {
+    const next = (prev.next as { text: string; krId?: string; done?: boolean }[]).map((n, i) => ({
+      ...n,
+      done: input.carried[i]?.text === n.text ? input.carried[i].done : !!n.done,
+    }));
+    await supabase.from("reviews").update({ next }).eq("week", prevWeek);
+  }
+
+  // 2. Only the latest completed review moves the live key-result values.
+  const { data: later } = await supabase
+    .from("reviews")
+    .select("week")
+    .gt("week", week)
+    .not("completed_at", "is", null)
+    .limit(1);
+  if (later && later.length) return;
+
+  const quarter = quarterOfWeek(week).key;
+  const { data: rows } = await supabase
+    .from("objectives")
+    .select("id, quarter, position, title, why, key_results, created_at, updated_at")
+    .eq("quarter", quarter);
+  for (const o of (rows ?? []).map(parseObjective)) {
+    let changed = false;
+    const key_results = o.key_results.map((k) => {
+      const v = input.kr_values[k.id];
+      if (typeof v === "number" && v !== k.current) {
+        changed = true;
+        return { ...k, current: v };
+      }
+      return k;
+    });
+    if (changed) await supabase.from("objectives").update({ key_results }).eq("id", o.id);
+  }
+}
+
+export async function setCommitmentDone(week: string, index: number, done: boolean): Promise<ActionResult> {
+  try {
+    if (!isWeekId(week)) return fail("That week doesn't exist.");
+    const { supabase } = await authed();
+    const { data, error } = await supabase.from("reviews").select("week, carried, reflection, confidence, kr_values, next, sparring, completed_at, updated_at").eq("week", week).maybeSingle();
+    if (error) throw error;
+    if (!data) return fail("That review no longer exists.");
+    const review = parseReview(data);
+    if (!review.next[index]) return fail("That commitment no longer exists.");
+    const next = review.next.map((n, i) => (i === index ? { ...n, done } : n));
+    const { error: e2 } = await supabase.from("reviews").update({ next }).eq("week", week);
+    if (e2) throw e2;
+    revalidatePath("/app");
+    return ok(undefined);
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+// ---------------------------------------------------------------- objectives
+
+export async function createObjective(quarter: string, seed?: Partial<ObjectiveInput>): Promise<ActionResult<Objective>> {
+  try {
+    if (!isQuarterKey(quarter)) return fail("That quarter doesn't exist.");
+    const { supabase, user } = await authed();
+    const { count } = await supabase
+      .from("objectives")
+      .select("id", { count: "exact", head: true })
+      .eq("quarter", quarter);
+    if ((count ?? 0) >= LIMITS.objectives) return fail("Three objectives is the limit. Delete one to add another.");
+
+    const input = objectiveInputSchema.parse({
+      title: seed?.title ?? "",
+      why: seed?.why ?? "",
+      key_results: seed?.key_results ?? [
+        { id: newId(), title: "", kind: "outcome", start: 0, current: 0, target: 0, unit: "" },
+      ],
+    });
+    const { data, error } = await supabase
+      .from("objectives")
+      .insert({ user_id: user.id, quarter, position: count ?? 0, ...input })
+      .select("id, quarter, position, title, why, key_results, created_at, updated_at")
+      .single();
+    if (error) {
+      if (error.message.includes("objective_limit")) return fail("Three objectives is the limit. Delete one to add another.");
+      throw error;
+    }
+    revalidatePath("/app", "layout");
+    return ok(parseObjective(data));
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+export async function updateObjective(id: string, raw: ObjectiveInput): Promise<ActionResult<{ savedAt: string }>> {
+  try {
+    const input = objectiveInputSchema.parse(raw);
+    const { supabase } = await authed();
+    const { data, error } = await supabase
+      .from("objectives")
+      .update({ title: input.title, why: input.why, key_results: input.key_results })
+      .eq("id", id)
+      .select("updated_at")
+      .single();
+    if (error) throw error;
+    revalidatePath("/app");
+    return ok({ savedAt: data.updated_at as string });
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+export async function deleteObjective(id: string): Promise<ActionResult> {
+  try {
+    const { supabase } = await authed();
+    const { error } = await supabase.from("objectives").delete().eq("id", id);
+    if (error) throw error;
+    revalidatePath("/app", "layout");
+    return ok(undefined);
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+// ---------------------------------------------------------------- profile & account
+
+export async function updateProfile(raw: ProfileInput): Promise<ActionResult> {
+  try {
+    const input = profileInputSchema.parse(raw);
+    const { supabase, user } = await authed();
+    const { error } = await supabase.from("profiles").update(input).eq("id", user.id);
+    if (error) throw error;
+    revalidatePath("/app", "layout");
+    return ok(undefined);
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+export async function completeOnboarding(
+  raw: ProfileInput,
+  quarter: string,
+  firstObjective: { title: string; why: string } | null,
+): Promise<ActionResult> {
+  try {
+    const input = profileInputSchema.parse(raw);
+    const { supabase, user } = await authed();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ ...input, onboarded_at: new Date().toISOString() })
+      .eq("id", user.id);
+    if (error) throw error;
+    if (firstObjective && firstObjective.title.trim()) {
+      const res = await createObjective(quarter, { title: firstObjective.title.trim(), why: firstObjective.why.trim() });
+      if (!res.ok) return res;
+    }
+    revalidatePath("/app", "layout");
+    return ok(undefined);
+  } catch (e) {
+    return fail(message(e));
+  }
+}
+
+export async function signOut() {
+  const { supabase } = await getSession();
+  await supabase.auth.signOut();
+  redirect("/");
+}
+
+export async function deleteAccount(confirmation: string): Promise<ActionResult> {
+  if (confirmation.trim().toUpperCase() !== "DELETE") return fail('Type DELETE to confirm.');
+  try {
+    const { supabase, user } = await authed();
+    const admin = createAdminClient();
+    const { error } = await admin.auth.admin.deleteUser(user.id);
+    if (error) throw error;
+    await supabase.auth.signOut();
+  } catch (e) {
+    return fail(message(e));
+  }
+  redirect("/?deleted=1");
+}
