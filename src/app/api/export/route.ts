@@ -8,8 +8,9 @@ export async function GET() {
   const { supabase, user } = await getSession();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
-  const [profile, objectives, reviews] = await Promise.all([
+  const [profile, aspiration, objectives, reviews] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase.from("aspirations").select("*").maybeSingle(),
     supabase.from("objectives").select("*").order("quarter").order("position"),
     supabase.from("reviews").select("*").order("week"),
   ]);
@@ -18,6 +19,7 @@ export async function GET() {
     exported_at: new Date().toISOString(),
     account: { id: user.id, email: user.email, created_at: user.created_at },
     profile: profile.data,
+    aspiration: aspiration.data ?? null,
     objectives: objectives.data ?? [],
     reviews: reviews.data ?? [],
   };

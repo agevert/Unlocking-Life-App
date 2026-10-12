@@ -1,16 +1,22 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { AspirationStrip } from "@/components/AspirationStrip";
 import { CommitmentList } from "@/components/CommitmentList";
 import { ObjectiveCard } from "@/components/ObjectiveCard";
-import { getClock, getObjectives, getProfile, getReviews } from "@/lib/data";
+import { getAspiration, getClock, getObjectives, getProfile, getReviews } from "@/lib/data";
 import { latestConfidence } from "@/lib/okr";
+import { foundationLabel } from "@/lib/schemas";
 import { quarterLabel, shiftWeek, weekNumber, weekRange } from "@/lib/week";
 
 export const metadata: Metadata = { title: "Now" };
 
 export default async function NowPage() {
   const [profile, clock] = await Promise.all([getProfile(), getClock()]);
-  const [objectives, reviews] = await Promise.all([getObjectives(clock.quarter.key), getReviews(60)]);
+  const [objectives, reviews, aspiration] = await Promise.all([
+    getObjectives(clock.quarter.key),
+    getReviews(60),
+    getAspiration(),
+  ]);
   const commitWeek = shiftWeek(clock.currentWeek, -1);
   const commitReview = reviews.find((r) => r.week === commitWeek);
   const pending = reviews.find((r) => r.week === clock.reviewWeek);
@@ -51,13 +57,20 @@ export default async function NowPage() {
       </section>
 
       <section className="stack">
+        <AspirationStrip aspiration={aspiration} objectives={objectives} quietWhenEmpty />
         <div className="spread">
           <h2>{quarterLabel(clock.quarter.key)} objectives</h2>
           <span className="mono muted" style={{ fontSize: "0.8rem" }}>Dark tick = where linear progress would be today</span>
         </div>
         {objectives.length ? (
           objectives.map((o) => (
-            <ObjectiveCard key={o.id} objective={o} pace={clock.pace} confidence={latestConfidence(reviews, o.id)?.value ?? null} />
+            <ObjectiveCard
+              key={o.id}
+              objective={o}
+              pace={clock.pace}
+              confidence={latestConfidence(reviews, o.id)?.value ?? null}
+              foundation={foundationLabel(aspiration, o.foundation)}
+            />
           ))
         ) : (
           <div className="empty stack">

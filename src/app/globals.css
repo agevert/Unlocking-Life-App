@@ -553,7 +553,8 @@ input[type="number"].input {
   }
   .bottombar {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     position: fixed;
     left: 0;
     right: 0;
@@ -1348,5 +1349,125 @@ input[type="number"].input {
   * {
     transition: none !important;
     animation: none !important;
+  }
+}
+
+/* ---------- aspiration: the layer above the quarter ---------- */
+.asp-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.asp-strip.empty-strip {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  border-left-color: var(--line);
+  border-style: dashed;
+  background: transparent;
+}
+.asp-strip.empty-strip p {
+  color: var(--muted);
+  margin-top: 2px;
+  max-width: 60ch;
+}
+.asp-edit {
+  font-size: 0.85rem;
+}
+.asp-vision {
+  font-family: var(--display);
+  font-size: 1.02rem;
+  line-height: 1.45;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.asp-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.asp-chips .chip {
+  white-space: normal;
+}
+.obj-foundation {
+  margin-bottom: 6px;
+}
+.asp-hint {
+  font-size: 0.9rem;
+  margin-top: 3px;
+  max-width: 62ch;
+}
+.asp-vision-grid {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.asp-vision-grid textarea.input {
+  min-height: 120px;
+}
+.asp-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.asp-num {
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.85rem;
+}
+.asp-confirm {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-left: 36px;
+  font-size: 0.88rem;
+}
+.asp-coverage {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.asp-coverage li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+}
+.asp-coverage li + li {
+  border-top: 1px solid var(--line);
+}
+.asp-cov-name {
+  font-weight: 500;
+}
+.asp-cov-obj {
+  color: var(--muted);
+}
+.asp-coverage .chip {
+  justify-self: start;
+}
+@media (max-width: 640px) {
+  .asp-vision-grid,
+  .asp-coverage li {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AspirationStrip } from "@/components/AspirationStrip";
 import { ObjectivesEditor } from "@/components/ObjectivesEditor";
-import { getClock, getObjectives } from "@/lib/data";
+import { getAspiration, getClock, getObjectives } from "@/lib/data";
 import { isQuarterKey, quarterLabel, shiftQuarter } from "@/lib/week";
 
 export const metadata: Metadata = { title: "Objectives" };
@@ -12,10 +13,11 @@ export default async function ObjectivesPage({ searchParams }: { searchParams: P
   const current = clock.quarter.key;
   const allowed = [shiftQuarter(current, -1), current, shiftQuarter(current, 1)];
   const quarter = q && isQuarterKey(q) && allowed.includes(q) ? q : current;
-  const objectives = await getObjectives(quarter);
+  const [objectives, aspiration] = await Promise.all([getObjectives(quarter), getAspiration()]);
 
   return (
     <>
+      <AspirationStrip aspiration={aspiration} objectives={objectives} />
       <div className="spread">
         <div>
           <div className="eyebrow">Objectives</div>
@@ -37,9 +39,19 @@ export default async function ObjectivesPage({ searchParams }: { searchParams: P
       <p className="muted" style={{ maxWidth: "68ch" }}>
         <strong style={{ color: "var(--ink)" }}>Three objectives at most.</strong> An objective is a direction worth a quarter;
         key results are the evidence you got there. Write outcomes you could prove to a sceptic, not tasks. Add one input key
-        result when the outcome depends on other people. Changes save automatically.
+        result when the outcome depends on other people.
+        {aspiration.foundations.length
+          ? " Tag each objective with the foundation it serves: one per foundation."
+          : " Once you name your foundations under Aspiration, each objective gets tagged to one."}{" "}
+        Changes save automatically.
       </p>
-      <ObjectivesEditor key={quarter} quarter={quarter} initial={objectives} readOnly={quarter < current} />
+      <ObjectivesEditor
+        key={quarter}
+        quarter={quarter}
+        initial={objectives}
+        foundations={aspiration.foundations}
+        readOnly={quarter < current}
+      />
     </>
   );
 }
