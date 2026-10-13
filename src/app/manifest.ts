@@ -10,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#f4f5f1",
-    theme_color: "#2340c8",
+    background_color: "#f3f1e9",
+    theme_color: "#365d48",
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
@@ -19,7 +19,8 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       { name: "Weekly review", url: "/app/review" },
-      { name: "Objectives", url: "/app/objectives" },
+      { name: "Goals", url: "/app/objectives" },
+      { name: "Log evidence", url: "/app/log#check-in" },
     ],
   };
 }

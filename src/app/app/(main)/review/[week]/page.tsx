@@ -27,19 +27,28 @@ export default async function ReviewPage({ params }: Props) {
   const nextWeek = shiftWeek(week, 1);
 
   return (
-    <ReviewForm
-      key={week}
-      week={week}
-      weekNumber={weekNumber(week)}
-      range={weekRange(week)}
-      quarterEnd={quarter.end}
-      prevWeek={shiftWeek(week, -1)}
-      nextWeek={nextWeek <= clock.currentWeek ? nextWeek : null}
-      review={review}
-      carriedFrom={prev?.next ?? []}
-      objectives={objectives}
-      priorConfidence={priorConfidence}
-      sparringEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
-    />
+    <>
+      <div className="review-coach-intro">
+        <div>
+          <div className="eyebrow">Weekly reflection</div>
+          <strong>Evidence → bottleneck → next practice.</strong>
+        </div>
+        <p>For the reflection fields, focus the field and tap <b>Speak</b>. Dictate naturally instead of typing.</p>
+      </div>
+      <ReviewForm
+        key={week}
+        week={week}
+        weekNumber={weekNumber(week)}
+        range={weekRange(week)}
+        quarterEnd={quarter.end}
+        prevWeek={shiftWeek(week, -1)}
+        nextWeek={nextWeek <= clock.currentWeek ? nextWeek : null}
+        review={review}
+        carriedFrom={prev?.next ?? []}
+        objectives={objectives}
+        priorConfidence={priorConfidence}
+        sparringEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
+      />
+    </>
   );
 }

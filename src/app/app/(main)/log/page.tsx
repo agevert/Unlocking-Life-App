@@ -1,105 +1,108 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ConfidenceChart } from "@/components/ConfidenceChart";
-import { getClock, getObjectives, getReviews } from "@/lib/data";
+import { EvidenceCheckIn } from "@/components/EvidenceCheckIn";
+import { getClock, getEvidence, getObjectives, getReviews } from "@/lib/data";
 import { logStats, percent } from "@/lib/okr";
-import { quarterWeeks, weekNumber, weekRange } from "@/lib/week";
+import { weekNumber, weekRange } from "@/lib/week";
 
-export const metadata: Metadata = { title: "Log" };
+export const metadata: Metadata = { title: "Evidence" };
 
-export default async function LogPage() {
+const kindLabel = (kind: string) => kind === "real_world" ? "Real-world test" : kind === "experiment" ? "Experiment" : "Practice";
+
+export default async function EvidencePage() {
   const clock = await getClock();
-  const [objectives, reviews] = await Promise.all([getObjectives(clock.quarter.key), getReviews(120)]);
-  const weeks = quarterWeeks(clock.quarter);
-  const elapsed = weeks.filter((w) => w < clock.currentWeek);
-  const reviewedThisQuarter = elapsed.filter((w) => reviews.find((r) => r.week === w)?.completed_at).length;
+  const [objectives, reviews, evidence] = await Promise.all([
+    getObjectives(clock.quarter.key),
+    getReviews(24),
+    getEvidence(60),
+  ]);
   const stats = logStats(reviews.slice(0, 8));
-  const anyConfidence = reviews.some((r) => Object.keys(r.confidence).length);
+  const krNames = new Map<string, string>();
+  const objectiveNames = new Map<string, string>();
+  for (const o of objectives) {
+    objectiveNames.set(o.id, o.title || "Untitled goal");
+    for (const k of o.key_results) krNames.set(k.id, k.title || "Untitled key result");
+  }
 
   return (
     <>
-      <div>
-        <div className="eyebrow">Log</div>
-        <h1>How the quarter is really going</h1>
+      <div className="page-intro">
+        <div className="eyebrow">Evidence</div>
+        <h1>Improvement needs receipts.</h1>
+        <p className="lede">Capture a deliberate rep while it is fresh. The coach turns it into a capability signal and the next practice.</p>
       </div>
 
-      <div className="stats">
-        <div className="stat"><b className="mono">{reviewedThisQuarter}/{elapsed.length}</b><span>Weeks reviewed this quarter</span></div>
-        <div className="stat"><b className="mono">{percent(stats.followThrough.done, stats.followThrough.total)}</b><span>Follow-through, last 8 reviews{stats.followThrough.total ? ` (${stats.followThrough.done}/${stats.followThrough.total})` : ""}</span></div>
-        <div className="stat"><b className="mono">{percent(stats.linked.linked, stats.linked.total)}</b><span>Commitments linked to a key result</span></div>
-        <div className="stat"><b className="mono">{stats.averageEnergy ? stats.averageEnergy.toFixed(1) : "–"}</b><span>Average energy, out of 5</span></div>
-      </div>
+      <EvidenceCheckIn objectives={objectives} />
 
       <section className="stack">
         <div className="spread">
-          <h2>Confidence by week</h2>
-          <span className="mono muted" style={{ fontSize: "0.8rem" }}>1–10 · ISO weeks</span>
+          <div>
+            <div className="eyebrow">Recent evidence</div>
+            <h2>What changed in reality</h2>
+          </div>
+          <span className="mono muted" style={{ fontSize: "0.8rem" }}>{evidence.length} saved</span>
         </div>
-        <div className="card chartbox">
-          <ConfidenceChart weeks={weeks} currentWeek={clock.currentWeek} objectives={objectives} reviews={reviews} />
-          {!anyConfidence ? (
-            <p className="muted" style={{ fontSize: "0.86rem", marginTop: 6 }}>
-              Your confidence ratings plot here after the first review. A line that drops two weeks in a row is the signal to
-              re-plan, not to try harder.
-            </p>
-          ) : null}
-          <div className="legend">
-            {objectives.map((o, i) => (
-              <span key={o.id}><i style={{ background: `var(--s${(i % 3) + 1})` }} />{o.title || "Untitled objective"}</span>
+        {!evidence.length ? (
+          <div className="empty">Your deliberate practice, experiments and real-world tests will build a record here.</div>
+        ) : (
+          <div className="evidence-feed">
+            {evidence.map((entry) => (
+              <article key={entry.id} className="evidence-entry">
+                <div className="evidence-entry-head">
+                  <span className="chip accent">{kindLabel(entry.kind)}</span>
+                  <time className="mono muted" dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</time>
+                </div>
+                <h3>{entry.practice}</h3>
+                <p>{entry.evidence}</p>
+                <div className="evidence-meta">
+                  {entry.objective_id && objectiveNames.get(entry.objective_id) ? <span>{objectiveNames.get(entry.objective_id)}</span> : null}
+                  {entry.kr_id && krNames.get(entry.kr_id) ? <span>→ {krNames.get(entry.kr_id)}</span> : null}
+                  <span>Difficulty {entry.difficulty}/5</span>
+                </div>
+                {entry.coach_feedback ? (
+                  <div className="evidence-coach-note">
+                    <span className="eyebrow">Coach</span>
+                    <p>{entry.coach_feedback}</p>
+                    {entry.next_practice ? <strong>Next: {entry.next_practice}</strong> : null}
+                  </div>
+                ) : null}
+              </article>
             ))}
           </div>
-        </div>
+        )}
+      </section>
+
+      <section className="v2-metrics" aria-label="Weekly signals">
+        <div><b className="mono">{percent(stats.followThrough.done, stats.followThrough.total)}</b><span>Follow-through · last 8 reviews</span></div>
+        <div><b className="mono">{percent(stats.linked.linked, stats.linked.total)}</b><span>Commitments linked to a KR</span></div>
+        <div><b className="mono">{stats.averageEnergy ? stats.averageEnergy.toFixed(1) : "–"}</b><span>Average energy /5</span></div>
       </section>
 
       <section className="stack">
         <div className="spread">
-          <h2>Past reviews</h2>
-          <span className="mono muted" style={{ fontSize: "0.8rem" }}>{reviews.length} saved</span>
+          <div>
+            <div className="eyebrow">Weekly reflection</div>
+            <h2>What the weeks taught you</h2>
+          </div>
+          <Link className="btn small" href="/app/review">Open review</Link>
         </div>
-        {!reviews.length ? (
-          <p className="empty">
-            Every review lands here: what you committed to, what moved, what you avoided, and the challenge you got back.
-          </p>
-        ) : null}
-        {reviews.map((r, i) => {
-          const done = r.carried.filter((c) => c.done).length;
-          const ratio = r.carried.length ? done / r.carried.length : 0;
-          return (
-            <details key={r.week} className="entry" open={i === 0}>
-              <summary>
-                <div>
-                  <div className="eyebrow">{weekRange(r.week)}</div>
-                  <strong style={{ fontFamily: "var(--display)", fontSize: "1.05rem" }}>Week {weekNumber(r.week)}</strong>
-                  {!r.completed_at ? <span className="chip" style={{ marginLeft: 8 }}>Draft</span> : null}
-                </div>
-                <div className="row" style={{ "--gap": "6px" } as React.CSSProperties}>
-                  {r.carried.length ? (
-                    <span className={`chip ${ratio >= 0.67 ? "good" : ratio >= 0.34 ? "warn" : "bad"}`}>{done}/{r.carried.length} done</span>
-                  ) : null}
-                  {r.reflection.energy ? <span className="chip">Energy {r.reflection.energy}/5</span> : null}
-                  {objectives.map((o, oi) =>
-                    r.confidence[o.id] ? (
-                      <span key={o.id} className="chip" style={{ color: `var(--s${(oi % 3) + 1})` }}>{r.confidence[o.id]}/10</span>
-                    ) : null,
-                  )}
-                </div>
-              </summary>
-              <div className="entry-body">
-                {r.reflection.moved ? <div><h4>Moved a key result</h4><p>{r.reflection.moved}</p></div> : null}
-                {r.reflection.avoided ? <div><h4>Avoided</h4><p>{r.reflection.avoided}</p></div> : null}
-                {r.reflection.lesson ? <div><h4>Advice to self</h4><p>{r.reflection.lesson}</p></div> : null}
-                {r.next.length ? (
-                  <div>
-                    <h4>Committed for the following week</h4>
-                    <p>{r.next.map((n) => `${n.done ? "✓" : "·"} ${n.text}`).join("\n")}</p>
-                  </div>
-                ) : null}
-                {r.sparring ? <div><h4>Sparring</h4><p>{r.sparring}</p></div> : null}
-                <div><Link className="btn small" href={`/app/review/${r.week}`}>Open this review</Link></div>
+        {reviews.slice(0, 8).map((r, i) => (
+          <details key={r.week} className="entry" open={i === 0}>
+            <summary>
+              <div>
+                <div className="eyebrow">{weekRange(r.week)}</div>
+                <strong style={{ fontFamily: "var(--display)", fontSize: "1.05rem" }}>Week {weekNumber(r.week)}</strong>
               </div>
-            </details>
-          );
-        })}
+              <span className={`chip ${r.completed_at ? "good" : ""}`}>{r.completed_at ? "Reviewed" : "Draft"}</span>
+            </summary>
+            <div className="entry-body">
+              {r.reflection.moved ? <div><h4>Evidence of movement</h4><p>{r.reflection.moved}</p></div> : null}
+              {r.reflection.avoided ? <div><h4>Avoided</h4><p>{r.reflection.avoided}</p></div> : null}
+              {r.reflection.lesson ? <div><h4>Lesson</h4><p>{r.reflection.lesson}</p></div> : null}
+              {r.sparring ? <div><h4>Coach</h4><p>{r.sparring}</p></div> : null}
+            </div>
+          </details>
+        ))}
       </section>
     </>
   );

@@ -5,15 +5,19 @@ export function ObjectiveCard({
   objective,
   pace,
   confidence,
+  foundation = null,
 }: {
   objective: Objective;
   pace: number;
   confidence: number | null;
+  /** Name of the foundation this objective serves, if tagged. */
+  foundation?: string | null;
 }) {
   return (
     <article className="card obj">
       <div className="obj-head">
         <div>
+          {foundation ? <span className="chip accent obj-foundation">{foundation}</span> : null}
           <h2>{objective.title || "Untitled objective"}</h2>
           {objective.why ? <p className="obj-why">{objective.why}</p> : null}
         </div>

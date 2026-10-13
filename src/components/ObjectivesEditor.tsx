@@ -1,16 +1,40 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { createObjective, deleteObjective, updateObjective } from "@/lib/actions";
+import { createObjective, deleteObjective, setObjectiveFoundation, updateObjective } from "@/lib/actions";
 import { LIMITS } from "@/lib/config";
 import { newId } from "@/lib/okr";
-import type { KeyResult, Objective } from "@/lib/schemas";
+import type { Foundation, KeyResult, Objective } from "@/lib/schemas";
 import { useToast } from "./Toast";
 
-export function ObjectivesEditor({ quarter, initial, readOnly }: { quarter: string; initial: Objective[]; readOnly: boolean }) {
+export function ObjectivesEditor({
+  quarter,
+  initial,
+  foundations,
+  readOnly,
+}: {
+  quarter: string;
+  initial: Objective[];
+  foundations: Foundation[];
+  readOnly: boolean;
+}) {
   const [items, setItems] = useState(initial);
+  const [tags, setTags] = useState<Record<string, string | null>>(() =>
+    Object.fromEntries(initial.map((o) => [o.id, o.foundation])),
+  );
   const [adding, startAdd] = useTransition();
   const toast = useToast();
+
+  /** Optimistic: show the new tag at once, put the old one back if the server says no. */
+  const tag = async (id: string, foundation: string | null) => {
+    const before = tags[id] ?? null;
+    setTags((t) => ({ ...t, [id]: foundation }));
+    const res = await setObjectiveFoundation(id, foundation);
+    if (!res.ok) {
+      setTags((t) => ({ ...t, [id]: before }));
+      toast(res.error);
+    }
+  };
 
   const add = () =>
     startAdd(async () => {
@@ -28,6 +52,10 @@ export function ObjectivesEditor({ quarter, initial, readOnly }: { quarter: stri
           index={i}
           initial={o}
           readOnly={readOnly}
+          foundations={foundations}
+          foundation={tags[o.id] ?? null}
+          takenBy={takenBy(items, tags, o.id)}
+          onFoundation={(f) => tag(o.id, f)}
           onDeleted={() => setItems((x) => x.filter((y) => y.id !== o.id))}
         />
       ))}
@@ -49,17 +77,35 @@ export function ObjectivesEditor({ quarter, initial, readOnly }: { quarter: stri
   );
 }
 
+/** For each foundation, the number of the other objective already tagged with it. */
+function takenBy(items: Objective[], tags: Record<string, string | null>, self: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  items.forEach((o, i) => {
+    const f = tags[o.id];
+    if (o.id !== self && f) out[f] = i + 1;
+  });
+  return out;
+}
+
 type SaveState = "saved" | "saving" | "error";
 
 function ObjectiveEditorCard({
   index,
   initial,
   readOnly,
+  foundations,
+  foundation,
+  takenBy,
+  onFoundation,
   onDeleted,
 }: {
   index: number;
   initial: Objective;
   readOnly: boolean;
+  foundations: Foundation[];
+  foundation: string | null;
+  takenBy: Record<string, number>;
+  onFoundation: (foundation: string | null) => void;
   onDeleted: () => void;
 }) {
   const [o, setO] = useState(initial);
@@ -124,6 +170,24 @@ function ObjectiveEditorCard({
           onChange={(e) => setO({ ...o, why: e.target.value })}
         />
       </label>
+      {foundations.length ? (
+        <label className="field">
+          <span className="label">Serves foundation</span>
+          <select
+            className="input"
+            value={foundation && foundations.some((f) => f.id === foundation) ? foundation : ""}
+            disabled={readOnly}
+            onChange={(e) => onFoundation(e.target.value || null)}
+          >
+            <option value="">Not linked</option>
+            {foundations.map((f, i) => (
+              <option key={f.id} value={f.id} disabled={!!takenBy[f.id]}>
+                {(f.name.trim() || `Foundation ${i + 1}`) + (takenBy[f.id] ? ` (objective ${takenBy[f.id]})` : "")}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <div className="stack" style={{ "--gap": "10px" } as React.CSSProperties}>
         {o.key_results.map((k, i) => (
