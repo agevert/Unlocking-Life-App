@@ -4,8 +4,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
 import {
   commitmentSchema,
+  emptyAspiration,
+  foundationSchema,
   keyResultSchema,
   reflectionSchema,
+  type Aspiration,
+  type EvidenceEntry,
   type Objective,
   type Profile,
   type Review,
@@ -20,7 +24,6 @@ export const getSession = cache(async () => {
   return { supabase, user };
 });
 
-/** For pages under /app: returns the user or sends them to sign in. */
 export async function requireUser() {
   const { supabase, user } = await getSession();
   if (!user) redirect("/login");
@@ -45,7 +48,6 @@ export const getProfile = cache(async (): Promise<Profile> => {
   };
 });
 
-/** "Now", seen from the user's own time zone. */
 export const getClock = cache(async () => {
   const profile = await getProfile();
   const today = todayIn(profile.timezone);
@@ -66,9 +68,12 @@ type ObjectiveRow = {
   title: string;
   why: string;
   key_results: unknown;
+  foundation?: unknown;
   created_at: string;
   updated_at: string;
 };
+
+export const OBJECTIVE_COLUMNS = "id, quarter, position, title, why, key_results, foundation, created_at, updated_at";
 
 export function parseObjective(row: ObjectiveRow): Objective {
   const krs = Array.isArray(row.key_results) ? row.key_results : [];
@@ -78,6 +83,7 @@ export function parseObjective(row: ObjectiveRow): Objective {
     position: row.position,
     title: row.title ?? "",
     why: row.why ?? "",
+    foundation: typeof row.foundation === "string" && row.foundation ? row.foundation : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     key_results: krs.flatMap((k) => {
@@ -91,7 +97,7 @@ export async function getObjectives(quarter: QuarterKey): Promise<Objective[]> {
   const { supabase } = await requireUser();
   const { data, error } = await supabase
     .from("objectives")
-    .select("id, quarter, position, title, why, key_results, created_at, updated_at")
+    .select(OBJECTIVE_COLUMNS)
     .eq("quarter", quarter)
     .order("position")
     .order("created_at");
@@ -158,4 +164,88 @@ export async function getReview(week: WeekId): Promise<Review | null> {
   const { data, error } = await supabase.from("reviews").select(REVIEW_COLUMNS).eq("week", week).maybeSingle();
   if (error) throw error;
   return data ? parseReview(data) : null;
+}
+
+// ---------------------------------------------------------------- aspiration
+
+type AspirationRow = {
+  horizon_year?: unknown;
+  vision?: unknown;
+  foundations?: unknown;
+  questions?: unknown;
+  updated_at?: unknown;
+};
+
+export const ASPIRATION_COLUMNS = "horizon_year, vision, foundations, questions, updated_at";
+
+export function parseAspiration(row: unknown): Aspiration {
+  if (!row || typeof row !== "object" || Array.isArray(row)) return emptyAspiration();
+  const r = row as AspirationRow;
+  const year = typeof r.horizon_year === "number" && Number.isInteger(r.horizon_year) ? r.horizon_year : null;
+  return {
+    horizon_year: year,
+    vision: typeof r.vision === "string" ? r.vision : "",
+    foundations: (Array.isArray(r.foundations) ? r.foundations : []).flatMap((f) => {
+      const p = foundationSchema.safeParse(f);
+      return p.success ? [p.data] : [];
+    }),
+    questions: (Array.isArray(r.questions) ? r.questions : []).filter((q): q is string => typeof q === "string"),
+    updated_at: typeof r.updated_at === "string" ? r.updated_at : null,
+  };
+}
+
+export const getAspiration = cache(async (): Promise<Aspiration> => {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase.from("aspirations").select(ASPIRATION_COLUMNS).maybeSingle();
+  if (error) {
+    console.error("aspiration load failed", error);
+    return emptyAspiration();
+  }
+  return parseAspiration(data);
+});
+
+// ---------------------------------------------------------------- evidence
+
+type EvidenceRow = {
+  id: string;
+  objective_id: string | null;
+  kr_id: string | null;
+  kind: string;
+  practice: string;
+  evidence: string;
+  difficulty: number;
+  coach_feedback: string | null;
+  next_practice: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export const EVIDENCE_COLUMNS = "id, objective_id, kr_id, kind, practice, evidence, difficulty, coach_feedback, next_practice, created_at, updated_at";
+
+export function parseEvidence(row: EvidenceRow): EvidenceEntry {
+  const kind = row.kind === "experiment" || row.kind === "real_world" ? row.kind : "practice";
+  return {
+    id: row.id,
+    objective_id: row.objective_id,
+    kr_id: row.kr_id ?? "",
+    kind,
+    practice: row.practice ?? "",
+    evidence: row.evidence ?? "",
+    difficulty: Math.min(5, Math.max(1, Number(row.difficulty) || 1)),
+    coach_feedback: row.coach_feedback,
+    next_practice: row.next_practice,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export async function getEvidence(limit = 50): Promise<EvidenceEntry[]> {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("evidence_entries")
+    .select(EVIDENCE_COLUMNS)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map(parseEvidence);
 }

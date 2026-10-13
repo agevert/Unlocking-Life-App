@@ -1,25 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AspirationStrip } from "@/components/AspirationStrip";
 import { ObjectivesEditor } from "@/components/ObjectivesEditor";
-import { getClock, getObjectives } from "@/lib/data";
+import { getAspiration, getClock, getObjectives } from "@/lib/data";
 import { isQuarterKey, quarterLabel, shiftQuarter } from "@/lib/week";
 
-export const metadata: Metadata = { title: "Objectives" };
+export const metadata: Metadata = { title: "Goals" };
 
-export default async function ObjectivesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function GoalsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const clock = await getClock();
   const { q } = await searchParams;
   const current = clock.quarter.key;
   const allowed = [shiftQuarter(current, -1), current, shiftQuarter(current, 1)];
   const quarter = q && isQuarterKey(q) && allowed.includes(q) ? q : current;
-  const objectives = await getObjectives(quarter);
+  const [objectives, aspiration] = await Promise.all([getObjectives(quarter), getAspiration()]);
 
   return (
     <>
+      <div className="page-intro">
+        <div className="eyebrow">Goals</div>
+        <h1>Build a capability. Prove it.</h1>
+        <p className="lede">A strong quarterly goal says what changes in reality. Key results are the evidence, not a list of tasks.</p>
+      </div>
+
+      <AspirationStrip aspiration={aspiration} objectives={objectives} />
+
       <div className="spread">
         <div>
-          <div className="eyebrow">Objectives</div>
-          <h1>{quarterLabel(quarter)}</h1>
+          <div className="eyebrow">Quarter</div>
+          <h2>{quarterLabel(quarter)}</h2>
         </div>
         <nav className="row" aria-label="Quarter">
           {allowed.map((k) => (
@@ -34,12 +43,19 @@ export default async function ObjectivesPage({ searchParams }: { searchParams: P
           ))}
         </nav>
       </div>
-      <p className="muted" style={{ maxWidth: "68ch" }}>
-        <strong style={{ color: "var(--ink)" }}>Three objectives at most.</strong> An objective is a direction worth a quarter;
-        key results are the evidence you got there. Write outcomes you could prove to a sceptic, not tasks. Add one input key
-        result when the outcome depends on other people. Changes save automatically.
-      </p>
-      <ObjectivesEditor key={quarter} quarter={quarter} initial={objectives} readOnly={quarter < current} />
+
+      <div className="coach-check goal-rule">
+        <span className="eyebrow">Coach rule</span>
+        <strong>Three goals maximum. Each key result should leave observable evidence that a sceptic would accept.</strong>
+      </div>
+
+      <ObjectivesEditor
+        key={quarter}
+        quarter={quarter}
+        initial={objectives}
+        foundations={aspiration.foundations}
+        readOnly={quarter < current}
+      />
     </>
   );
 }

@@ -1,11 +1,14 @@
-export const APP_NAME = "Threefold";
-export const APP_TAGLINE = "Three objectives. Thirty minutes a week. A sparring partner who doesn't let you off the hook.";
+export const APP_NAME = "Unlocking Life";
+export const APP_TAGLINE = "Turn intentional action into increased capability.";
 
 /** The constraints are the product. Change them deliberately. */
 export const LIMITS = {
   objectives: 3,
   keyResults: 4,
   commitments: 3,
+  foundations: 3,
+  questions: 5,
+  evidencePerDay: 20,
 } as const;
 
 export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
