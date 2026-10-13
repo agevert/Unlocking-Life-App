@@ -1,3 +1,4 @@
+import "@/app/coaching.css";
 import { redirect } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { Brand } from "@/components/Brand";

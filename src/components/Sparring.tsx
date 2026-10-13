@@ -24,7 +24,7 @@ export function Sparring({ week, initial, enabled }: { week: string; initial: st
       });
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Couldn't get a challenge this time. Try again in a minute.");
+        throw new Error(body.error || "Couldn't get coaching feedback this time. Try again in a minute.");
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -49,11 +49,11 @@ export function Sparring({ week, initial, enabled }: { week: string; initial: st
     <section id="sparring" className="card spar stack" aria-labelledby="spar-title">
       <div className="spread">
         <div>
-          <div className="eyebrow">Sparring partner</div>
-          <h2 id="spar-title" style={{ fontSize: "1.15rem" }}>Challenge this review</h2>
+          <div className="eyebrow">Coach</div>
+          <h2 id="spar-title" style={{ fontSize: "1.15rem" }}>Find the bottleneck</h2>
         </div>
         <button type="button" className="btn" onClick={run} disabled={!enabled || busy}>
-          {busy ? "Thinking…" : text ? "Challenge again" : "Spar with me"}
+          {busy ? "Thinking…" : text ? "Coach me again" : "Coach this review"}
         </button>
       </div>
       <div className="spar-out" aria-live="polite" aria-busy={busy}>
@@ -62,15 +62,15 @@ export function Sparring({ week, initial, enabled }: { week: string; initial: st
         ) : (
           <span className="muted">
             {enabled
-              ? "Claude reads your objectives, numbers and reflection, then pushes back: what you might be avoiding, and whether next week's commitments are the highest-leverage moves."
-              : "Complete the review first, then ask for a challenge."}
+              ? "Your coach reads the objectives, numbers and reflection, separates activity from evidence, identifies the current bottleneck, and proposes the next deliberate practice."
+              : "Complete the review first, then ask the coach to diagnose the bottleneck."}
           </span>
         )}
       </div>
       {error ? <p className="error" role="alert">{error}</p> : null}
       {text && !busy ? (
         <p className="muted" style={{ fontSize: "0.82rem" }}>
-          Answer the hardest question in one line in your reflection before you close the page.
+          Use the bottleneck and next practice to sharpen the coming week before you close the page.
         </p>
       ) : null}
     </section>
