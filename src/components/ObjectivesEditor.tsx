@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createObjective, deleteObjective, setObjectiveFoundation, updateObjective } from "@/lib/actions";
 import { LIMITS } from "@/lib/config";
 import { newId } from "@/lib/okr";
 import type { Foundation, KeyResult, Objective } from "@/lib/schemas";
+import { GoalCoach } from "./GoalCoach";
 import { useToast } from "./Toast";
 
 export function ObjectivesEditor({
@@ -23,7 +25,32 @@ export function ObjectivesEditor({
     Object.fromEntries(initial.map((o) => [o.id, o.foundation])),
   );
   const [adding, startAdd] = useTransition();
+  const [newGoalPath, setNewGoalPath] = useState<"choose" | "coach" | null>(null);
+  const [coachStarted, setCoachStarted] = useState(false);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const newGoalButton = useRef<HTMLButtonElement>(null);
+  const coachChoice = useRef<HTMLButtonElement>(null);
+  const router = useRouter();
   const toast = useToast();
+
+  useEffect(() => {
+    if (newGoalPath === "choose") coachChoice.current?.focus();
+  }, [newGoalPath]);
+
+  const closeNewGoal = () => {
+    setNewGoalPath(null);
+    requestAnimationFrame(() => newGoalButton.current?.focus());
+  };
+
+  const created = (objective: Objective) => {
+    setItems((x) => x.some((o) => o.id === objective.id) ? x : [...x, objective]);
+    setTags((x) => ({ ...x, [objective.id]: objective.foundation }));
+    setNewGoalPath(null);
+    setCoachStarted(false);
+    setCoachBusy(false);
+    router.refresh();
+    requestAnimationFrame(() => document.getElementById(`title-${objective.id}`)?.focus());
+  };
 
   /** Optimistic: show the new tag at once, put the old one back if the server says no. */
   const tag = async (id: string, foundation: string | null) => {
@@ -40,8 +67,7 @@ export function ObjectivesEditor({
     startAdd(async () => {
       const res = await createObjective(quarter);
       if (!res.ok) return toast(res.error);
-      setItems((x) => [...x, res.data]);
-      requestAnimationFrame(() => document.getElementById(`title-${res.data.id}`)?.focus());
+      created(res.data);
     });
 
   return (
@@ -68,9 +94,62 @@ export function ObjectivesEditor({
       ) : null}
       {!readOnly ? (
         <div>
-          <button className="btn primary" onClick={add} disabled={adding || items.length >= LIMITS.objectives}>
-            {items.length >= LIMITS.objectives ? "Three is the limit. Delete one to add another" : adding ? "Adding…" : "+ Add objective"}
+          <button
+            ref={newGoalButton}
+            type="button"
+            className="btn primary"
+            onClick={() => setNewGoalPath("choose")}
+            disabled={adding || coachBusy || items.length >= LIMITS.objectives}
+            aria-expanded={newGoalPath !== null}
+            aria-controls="new-goal-flow"
+          >
+            {items.length >= LIMITS.objectives ? "Three is the limit. Delete one to add another" : "+ New goal"}
           </button>
+        </div>
+      ) : null}
+      {!readOnly ? (
+        <div id="new-goal-flow" hidden={newGoalPath === null}>
+          {newGoalPath === "choose" ? (
+            <section className="card stack goal-path-picker" aria-labelledby="new-goal-heading">
+              <div className="spread">
+                <h2 id="new-goal-heading">How do you want to build this goal?</h2>
+                <button type="button" className="btn ghost small" onClick={closeNewGoal} disabled={adding}>Close</button>
+              </div>
+              <div className="goal-path-options">
+                <button
+                  ref={coachChoice}
+                  type="button"
+                  className="goal-path-option"
+                  disabled={adding || items.length >= LIMITS.objectives}
+                  onClick={() => {
+                    setCoachStarted(true);
+                    setNewGoalPath("coach");
+                  }}
+                >
+                  <strong>{coachStarted ? "Continue coaching" : "Coach me"}</strong>
+                  <span>Talk it through. Turn your thinking into an objective and measurable evidence.</span>
+                </button>
+                <button type="button" className="goal-path-option" onClick={add} disabled={adding || items.length >= LIMITS.objectives}>
+                  <strong>{adding ? "Creating…" : "Build manually"}</strong>
+                  <span>Start with a blank objective. Write and edit every field yourself.</span>
+                </button>
+              </div>
+            </section>
+          ) : null}
+          {coachStarted ? (
+            <div hidden={newGoalPath !== "coach"}>
+              <GoalCoach
+                quarter={quarter}
+                foundations={foundations}
+                takenFoundations={takenBy(items, tags, "")}
+                active={newGoalPath === "coach"}
+                canCreate={items.length < LIMITS.objectives}
+                onBusyChange={setCoachBusy}
+                onClose={closeNewGoal}
+                onCreated={created}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -124,8 +203,8 @@ function ObjectiveEditorCard({
     }
     setState("saving");
     const t = setTimeout(async () => {
-      const { title, why, key_results } = latest.current;
-      const res = await updateObjective(latest.current.id, { title, why, key_results });
+      const { title, why, key_results, bottleneck, first_practice } = latest.current;
+      const res = await updateObjective(latest.current.id, { title, why, key_results, bottleneck, first_practice });
       if (res.ok) setState("saved");
       else {
         setState("error");
@@ -187,6 +266,33 @@ function ObjectiveEditorCard({
             ))}
           </select>
         </label>
+      ) : null}
+
+      {initial.bottleneck || initial.first_practice ? (
+        <div className="goal-coaching-plan">
+          <label className="field">
+            <span className="label">Current bottleneck</span>
+            <textarea
+              aria-label="Current bottleneck"
+              className="input"
+              value={o.bottleneck ?? ""}
+              maxLength={1000}
+              disabled={readOnly}
+              onChange={(e) => setO({ ...o, bottleneck: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span className="label">First deliberate practice</span>
+            <textarea
+              aria-label="First deliberate practice"
+              className="input"
+              value={o.first_practice ?? ""}
+              maxLength={1000}
+              disabled={readOnly}
+              onChange={(e) => setO({ ...o, first_practice: e.target.value })}
+            />
+          </label>
+        </div>
       ) : null}
 
       <div className="stack" style={{ "--gap": "10px" } as React.CSSProperties}>

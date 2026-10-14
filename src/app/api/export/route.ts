@@ -8,12 +8,13 @@ export async function GET() {
   const { supabase, user } = await getSession();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
-  const [profile, aspiration, objectives, reviews, evidence] = await Promise.all([
+  const [profile, aspiration, objectives, reviews, evidence, goalCoachUsage] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase.from("aspirations").select("*").maybeSingle(),
     supabase.from("objectives").select("*").order("quarter").order("position"),
     supabase.from("reviews").select("*").order("week"),
     supabase.from("evidence_entries").select("*").order("created_at"),
+    supabase.from("goal_coach_events").select("id, created_at").eq("user_id", user.id).order("created_at"),
   ]);
 
   const body = {
@@ -24,6 +25,7 @@ export async function GET() {
     objectives: objectives.data ?? [],
     reviews: reviews.data ?? [],
     evidence: evidence.data ?? [],
+    goal_coach_usage: goalCoachUsage.data ?? [],
   };
 
   return new NextResponse(JSON.stringify(body, null, 2), {

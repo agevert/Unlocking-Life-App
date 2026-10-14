@@ -26,6 +26,7 @@ declare global {
 }
 
 function editableTarget(el: Element | null): HTMLInputElement | HTMLTextAreaElement | null {
+  if (el?.closest("[hidden], [inert]")) return null;
   if (el instanceof HTMLTextAreaElement && !el.disabled && !el.readOnly) return el;
   if (el instanceof HTMLInputElement && !el.disabled && !el.readOnly) {
     const ok = ["text", "search", "email", "url", "tel"].includes(el.type || "text");
@@ -80,13 +81,43 @@ export function VoiceDock() {
       }
     };
     document.addEventListener("focusin", focus);
-    return () => document.removeEventListener("focusin", focus);
+    return () => {
+      document.removeEventListener("focusin", focus);
+      const rec = recognition.current;
+      recognition.current = null;
+      if (rec) {
+        rec.onstart = null;
+        rec.onend = null;
+        rec.onerror = null;
+        rec.onresult = null;
+        rec.stop();
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    if (!hasTarget) return;
+    // Sending an answer or closing the interview can disable/remove the focused field.
+    const observer = new MutationObserver(() => {
+      const el = target.current;
+      if (el?.isConnected && editableTarget(el)) return;
+      target.current = null;
+      setHasTarget(false);
+      recognition.current?.stop();
+    });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["disabled", "readonly", "hidden", "inert"] });
+    return () => observer.disconnect();
+  }, [hasTarget]);
 
   const stop = () => recognition.current?.stop();
 
   const start = () => {
     if (!supported || !target.current) return;
+    if (!target.current.isConnected || !editableTarget(target.current)) {
+      target.current = null;
+      setHasTarget(false);
+      return;
+    }
     setError(null);
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Ctor) return;
@@ -98,7 +129,7 @@ export function VoiceDock() {
     rec.onstart = () => setListening(true);
     rec.onend = () => {
       setListening(false);
-      recognition.current = null;
+      if (recognition.current === rec) recognition.current = null;
     };
     rec.onerror = (event) => {
       setListening(false);
@@ -106,7 +137,12 @@ export function VoiceDock() {
     };
     rec.onresult = (event) => {
       const el = target.current;
-      if (!el) return;
+      if (!el?.isConnected || !editableTarget(el)) {
+        target.current = null;
+        setHasTarget(false);
+        rec.stop();
+        return;
+      }
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal && result[0]?.transcript) insertTranscript(el, result[0].transcript);

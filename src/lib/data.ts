@@ -69,11 +69,13 @@ type ObjectiveRow = {
   why: string;
   key_results: unknown;
   foundation?: unknown;
+  bottleneck?: unknown;
+  first_practice?: unknown;
   created_at: string;
   updated_at: string;
 };
 
-export const OBJECTIVE_COLUMNS = "id, quarter, position, title, why, key_results, foundation, created_at, updated_at";
+export const OBJECTIVE_COLUMNS = "id, quarter, position, title, why, key_results, foundation, bottleneck, first_practice, created_at, updated_at";
 
 export function parseObjective(row: ObjectiveRow): Objective {
   const krs = Array.isArray(row.key_results) ? row.key_results : [];
@@ -84,6 +86,8 @@ export function parseObjective(row: ObjectiveRow): Objective {
     title: row.title ?? "",
     why: row.why ?? "",
     foundation: typeof row.foundation === "string" && row.foundation ? row.foundation : null,
+    bottleneck: typeof row.bottleneck === "string" ? row.bottleneck : "",
+    first_practice: typeof row.first_practice === "string" ? row.first_practice : "",
     created_at: row.created_at,
     updated_at: row.updated_at,
     key_results: krs.flatMap((k) => {
