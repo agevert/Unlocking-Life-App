@@ -18,6 +18,8 @@ export const objectiveInputSchema = z.object({
   title: z.string().max(200),
   why: z.string().max(400),
   key_results: z.array(keyResultSchema).max(LIMITS.keyResults),
+  bottleneck: z.string().max(1000).optional(),
+  first_practice: z.string().max(1000).optional(),
 });
 export type ObjectiveInput = z.infer<typeof objectiveInputSchema>;
 

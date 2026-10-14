@@ -15,6 +15,7 @@ import {
   parseReview,
 } from "./data";
 import { newId } from "./okr";
+import { goalProposalSchema, isEditableGoalQuarter, type GoalProposal } from "./goal-coach";
 import {
   aspirationInputSchema,
   evidenceInputSchema,
@@ -180,7 +181,11 @@ export async function updateObjective(id: string, raw: ObjectiveInput): Promise<
     const { supabase } = await authed();
     const { data, error } = await supabase
       .from("objectives")
-      .update({ title: input.title, why: input.why, key_results: input.key_results })
+      .update({
+        title: input.title, why: input.why, key_results: input.key_results,
+        ...(input.bottleneck !== undefined ? { bottleneck: input.bottleneck } : {}),
+        ...(input.first_practice !== undefined ? { first_practice: input.first_practice } : {}),
+      })
       .eq("id", id)
       .select("updated_at")
       .single();
@@ -205,6 +210,74 @@ export async function deleteObjective(id: string): Promise<ActionResult> {
 }
 
 const FOUNDATION_TAKEN = "That foundation already has a goal this quarter. One per foundation.";
+
+/** Only the explicit acceptance action persists a coach proposal. A stable UUID makes retries safe. */
+export async function createCoachedObjective(
+  quarter: string,
+  raw: GoalProposal,
+  acceptanceId: string,
+): Promise<ActionResult<Objective>> {
+  try {
+    if (!isQuarterKey(quarter)) return fail("That quarter doesn't exist.");
+    const id = z.string().uuid().parse(acceptanceId);
+    const proposal = goalProposalSchema.parse(raw);
+    const { supabase, user } = await authed();
+
+    const existing = async () => {
+      const { data, error } = await supabase.from("objectives").select(OBJECTIVE_COLUMNS)
+        .eq("user_id", user.id).eq("id", id).maybeSingle();
+      if (error) throw error;
+      if (data && data.quarter !== quarter) throw new Error("That acceptance belongs to another quarter. Start a new interview.");
+      return data ? parseObjective(data) : null;
+    };
+    const prior = await existing();
+    if (prior) return ok(prior);
+
+    const { data: profile, error: profileError } = await supabase.from("profiles").select("timezone")
+      .eq("id", user.id).maybeSingle();
+    if (profileError) throw profileError;
+    if (!isEditableGoalQuarter(quarter, profile?.timezone ?? "Europe/Berlin")) {
+      return fail("Create goals for this quarter or next quarter. Past quarters are read-only.");
+    }
+
+    const { count, error: countError } = await supabase.from("objectives")
+      .select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("quarter", quarter);
+    if (countError) throw countError;
+    if ((count ?? 0) >= LIMITS.objectives) return fail("Three goals is the limit. Delete one to add another.");
+
+    if (proposal.foundation) {
+      const { data: aspiration, error: aspirationError } = await supabase.from("aspirations").select(ASPIRATION_COLUMNS)
+        .eq("user_id", user.id).maybeSingle();
+      if (aspirationError) throw aspirationError;
+      if (!parseAspiration(aspiration).foundations.some((foundation) => foundation.id === proposal.foundation)) {
+        return fail("That foundation no longer exists. Reload the page.");
+      }
+      const { data: taken, error: takenError } = await supabase.from("objectives").select("id")
+        .eq("user_id", user.id).eq("quarter", quarter).eq("foundation", proposal.foundation).limit(1);
+      if (takenError) throw takenError;
+      if (taken?.length) return fail(FOUNDATION_TAKEN);
+    }
+
+    const { data, error } = await supabase.from("objectives").insert({
+      id, user_id: user.id, quarter, position: count ?? 0,
+      title: proposal.title, why: proposal.why, foundation: proposal.foundation,
+      bottleneck: proposal.bottleneck, first_practice: proposal.first_practice,
+      key_results: proposal.key_results.map((kr) => ({ ...kr, id: newId(), current: kr.start })),
+    }).select(OBJECTIVE_COLUMNS).single();
+    if (error) {
+      // A concurrent acceptance or a response lost after commit may already have created this exact goal.
+      const recovered = await existing();
+      if (recovered) return ok(recovered);
+      if (error.message.includes("objective_limit")) return fail("Three goals is the limit. Delete one to add another.");
+      if (error.code === "23505" && proposal.foundation) return fail(FOUNDATION_TAKEN);
+      throw error;
+    }
+    revalidatePath("/app", "layout");
+    return ok(parseObjective(data));
+  } catch (error) {
+    return fail(message(error));
+  }
+}
 
 export async function setObjectiveFoundation(id: string, foundation: string | null): Promise<ActionResult> {
   try {

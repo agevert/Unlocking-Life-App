@@ -331,6 +331,117 @@ textarea.input { min-height: 105px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); }
 .goal-rule { margin-top: -8px; }
 
+/* Goal interview and proposal: a conversation before a commitment. */
+.goal-path-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.goal-path-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.goal-path-option:first-child { background: var(--accent-soft); }
+.goal-path-option strong { font-size: 1.05rem; }
+.goal-path-option span { color: var(--muted); line-height: 1.5; }
+.goal-path-option:hover { border-color: var(--accent); }
+.goal-path-option:disabled { opacity: .55; cursor: not-allowed; }
+.goal-coach {
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.goal-coach-header { align-items: flex-start; }
+.goal-coach-header h2 { margin-top: 5px; }
+.goal-coach-context { max-width: 76ch; font-size: .9rem; }
+.goal-coach-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 4px 5px 4px 0;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--line) transparent;
+}
+.goal-coach-message {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 88%;
+  padding: 15px 17px;
+  border-radius: 17px;
+  background: var(--paper);
+  overflow-wrap: anywhere;
+}
+.goal-coach-message p { white-space: pre-wrap; }
+.goal-coach-message.user { align-self: flex-end; background: var(--accent-soft); }
+.goal-coach-answer { min-height: 130px !important; }
+.goal-coach-draft-notice {
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: var(--accent-soft);
+  font-size: .87rem;
+  align-items: center;
+}
+.goal-coach-actions { align-items: center; }
+.goal-coach-actions .hint { max-width: 46ch; }
+.goal-proposal {
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.goal-proposal-summary > div { display: flex; flex-direction: column; gap: 5px; }
+.goal-proposal-summary h4 { font-family: var(--display); font-size: 1.35rem; font-weight: 600; line-height: 1.25; }
+.goal-proposal-summary p,
+.goal-coaching-note p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.goal-proposal-kr,
+.goal-coaching-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 15px 17px;
+  border-radius: 14px;
+  background: var(--paper);
+  overflow-wrap: anywhere;
+}
+.goal-proposal-kr strong { font-weight: 600; }
+.goal-proposal-measure { color: var(--accent); font-family: var(--mono); font-size: .85rem; }
+.goal-coaching-plan { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.goal-proposal-kr-edit {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+}
+.goal-proposal-kr-title { grid-column: 1 / -1; }
+.goal-proposal-add { align-self: flex-start; }
+.goal-coach-error { padding: 14px; border: 1px solid var(--bad); border-radius: 13px; }
+.goal-coach-error .btn { align-self: flex-start; }
+
+@media (max-width: 640px) {
+  .goal-path-options,
+  .goal-coaching-plan { grid-template-columns: 1fr; }
+  .goal-path-option { padding: 17px; }
+  .goal-coach { padding: 16px; border-radius: 20px; }
+  .goal-coach-message { max-width: 96%; padding: 13px 14px; }
+  .goal-coach-transcript { max-height: 360px; }
+  .goal-proposal-kr-edit { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 13px; }
+  .goal-coach-actions .btn { flex: 1 1 auto; min-height: 44px; }
+}
+
 /* Existing weekly review, visually reframed as a guided conversation. */
 .steps { gap: 14px; }
 .steps .step {
